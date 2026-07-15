@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hospital Shift Timetable Scheduler</title>
+  <link rel="stylesheet" href="src/index.css">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- SheetJS (Excel Parser) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+  <div class="app-container">
+    <header>
+      <div class="brand">
+        <div class="brand-icon">
+          <i data-lucide="calendar-days"></i>
+        </div>
+        <div>
+          <h1>Aegis Scheduler</h1>
+          <p>Hospital Shift & Department Allocation Platform</p>
+        </div>
+      </div>
+      <div class="badge">Phase 1: Ingestion & Validation Active</div>
+    </header>
+
+    <div class="main-grid">
+      <!-- SIDEBAR: Ingestion Controls -->
+      <aside style="display: flex; flex-direction: column; gap: 1.5rem;">
+        
+        <!-- Excel Upload Card -->
+        <section class="glass-card">
+          <h2 class="section-title"><i data-lucide="file-up"></i> Ingest Constraints</h2>
+          
+          <div class="upload-zone" id="drop-zone">
+            <i data-lucide="file-spreadsheet" class="upload-icon"></i>
+            <p class="upload-text">Drag & drop template here</p>
+            <p class="upload-subtext">Supports .xlsx, .xls, .csv</p>
+            <button class="btn btn-secondary" style="margin-top: 1rem; width: auto;" onclick="document.getElementById('file-input').click()">
+              Browse Files
+            </button>
+            <input type="file" id="file-input" class="hidden-file-input" accept=".xlsx, .xls, .csv">
+          </div>
+
+          <div style="margin-top: 1.25rem; display: flex; gap: 0.5rem;">
+            <button class="btn btn-secondary" id="btn-download-template">
+              <i data-lucide="download"></i> Download Excel Template
+            </button>
+          </div>
+        </section>
+
+        <!-- Date Range & Period Config Card -->
+        <section class="glass-card">
+          <h2 class="section-title"><i data-lucide="sliders"></i> Shift Horizon</h2>
+          <div class="settings-group">
+            <div class="form-field">
+              <label class="form-label" for="start-date">Start Date</label>
+              <input type="date" id="start-date" class="form-input" value="2026-08-10">
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="end-date">End Date</label>
+              <input type="date" id="end-date" class="form-input" value="2026-08-16">
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="shift-hours">Hours Per Shift/Day</label>
+              <input type="number" id="shift-hours" class="form-input" value="8" min="1" max="24">
+            </div>
+            <div class="form-field" style="flex-direction: row; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+              <input type="checkbox" id="weekend-absent" checked style="width: 1rem; height: 1rem; cursor: pointer;">
+              <label class="form-label" for="weekend-absent" style="cursor: pointer; text-transform: none; font-size: 0.8125rem;">
+                Default Weekends as Absent
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- Diagnostics Card -->
+        <section class="glass-card">
+          <h2 class="section-title"><i data-lucide="test-tube"></i> Diagnostics</h2>
+          <div class="settings-group">
+            <button class="btn btn-secondary" id="btn-run-tests">
+              <i data-lucide="play-circle"></i> Run Parser Diagnostics
+            </button>
+            <div id="diagnostic-results" style="display: none; margin-top: 1rem; border-radius: var(--radius-md); padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-card);">
+              <!-- Test results listed here -->
+            </div>
+          </div>
+        </section>
+
+      </aside>
+
+      <!-- MAIN WORKSPACE: Data Preview & Log -->
+      <main style="display: flex; flex-direction: column; gap: 1.5rem;">
+        
+        <!-- Validation Status Panel -->
+        <section class="glass-card validation-card" id="validation-panel" style="display: none;">
+          <h2 class="section-title"><i data-lucide="shield-alert"></i> Parser Validation Summary</h2>
+          <div id="validation-messages">
+            <!-- Dynamic alerts go here -->
+          </div>
+        </section>
+
+        <!-- Preview Grid Card -->
+        <section class="glass-card preview-container" id="preview-panel">
+          <h2 class="section-title" style="margin-bottom: 0;"><i data-lucide="users"></i> Doctor Roster Constraints</h2>
+          
+          <!-- Empty State (Shown before upload) -->
+          <div class="empty-state" id="empty-state">
+            <i data-lucide="upload-cloud" class="empty-state-icon"></i>
+            <p>Upload a doctor constraint spreadsheet to populate the roster</p>
+            <p style="font-size: 0.75rem; margin-top: -0.5rem;">The system will immediately parse your file and validate all limits.</p>
+          </div>
+
+          <!-- Parsed Data View (Hidden by default) -->
+          <div id="preview-content" style="display: none;">
+            <div class="stats-grid">
+              <div class="stat-box">
+                <div class="stat-label">Total Doctors Loaded</div>
+                <div class="stat-val" id="stat-total-doctors">0</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Mapped Departments</div>
+                <div class="stat-val" id="stat-total-depts">0</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Validation Warnings</div>
+                <div class="stat-val" id="stat-total-warnings" style="color: var(--color-warning);">0</div>
+              </div>
+            </div>
+
+            <div class="table-wrapper">
+              <table id="roster-table">
+                <thead>
+                  <tr>
+                    <th>Doctor Name</th>
+                    <th>Departments</th>
+                    <th>Min/Max Hours</th>
+                    <th>Min/Max Days/Dept</th>
+                    <th>Absent Dates</th>
+                  </tr>
+                </thead>
+                <tbody id="roster-table-body">
+                  <!-- Row outputs go here -->
+                </tbody>
+              </table>
+            </div>
+
+            <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 1rem;">
+              <button class="btn btn-secondary" id="btn-reset" style="width: auto;">
+                <i data-lucide="rotate-ccw"></i> Clear Data
+              </button>
+              <button class="btn btn-primary" id="btn-proceed-solver" style="width: auto;" disabled>
+                Proceed to Scheduling Solver <i data-lucide="arrow-right"></i>
+              </button>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Main Orchestration Javascript -->
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
